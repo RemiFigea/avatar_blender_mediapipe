@@ -13,7 +13,8 @@ import mathutils
 LANDMARKS_FILEPATH = PROJECT_DIRPATH + '//data//test_lm_00632.json'
 MODEL_FILEPATH = PROJECT_DIRPATH + '//data//original_model.blend'
 
-# ---- Chains of keypoints to connect corresponding to bones
+# ---- Chains of keypoints to connect to build a bone
+# ---- Keypoint Ids reference is Mediapipe
 #
 CHAIN_DICT = {
     'pose' : {
@@ -35,7 +36,7 @@ CHAIN_DICT = {
     },
     'hand_R' : {
         'thumb_hd_R' : [[0, 1], [1, 2], [2, 3], [3, 4]],
-        'index_hd_R' : [[0,5], [5, 6], [6, 7], [7, 8]],
+        'index_hd_R' : [[0, 5], [5, 6], [6, 7], [7, 8]],
         'middle_hd_R' : [[0, 9], [9, 10], [10, 11], [11, 12]],
         'ring_hd_R': [[0, 13], [13, 14], [14, 15], [15, 16]],
         'pinky_hd_R': [[0, 17], [17, 18], [18, 19], [19, 20]],
@@ -906,6 +907,8 @@ adapt_face_landmarks_to_model(face_mesh_obj, face_landmarks)
 # -------------------------------- #
 
 
+# ---- Apply contraints to bones ---- #
+
 # ---- Apply strech_to contraint to the bones of the armature to force the tail of a previous bone to follow the head of a following bone in a chain.
 # ---- In addition the last bone of the arm channel will follow the corresponding hand (left or right).
 #
@@ -944,12 +947,12 @@ for chain_sub_dict in CHAIN_DICT.values():
                 chain_name=chain_name
                 )
 
-# ---- Generate shape keys to anime the the face
-#
+# ---- Generate shape keys to anime the the face ---- #
+
 generate_face_shape_keys(face_mesh_obj, face_landmarks)
 
-# ---- Generate the keyframes for the face accessories object
-#
+# ---- Generate the keyframes for the face accessories object ---- #
+
 generate_face_accessories_keyframes(face_mesh_obj, updated_auxiliaries_obj_dict)
         
 

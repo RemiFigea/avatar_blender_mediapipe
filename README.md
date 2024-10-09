@@ -32,11 +32,11 @@ The repository is structured as follows:
     - README.md
 ```
 
-- **`/blender_script.py`**: The script to run in Blender to generate the animation.
+- **`/blender_script.py`**: The script to run Blender to generate the animation.
 - **`/data/`**: Directory containing the data loaded in the script `blender_script.py`.
 - **`/test_landmarks_files.json`**: JSON files of Mediapipe landmarks I have extracted from a video to test the script.
 - **`/original_model.blend`**: Blender files containing the prepared 3D model character to animate.
-- **`/textures/`**: Textures used to create the 3D model character.
+- **`/textures/`**: Directory containing PNG images used to create texture of the 3D model character.
 
 ## Getting Started
 
@@ -66,9 +66,11 @@ I worked on a windows computer with Blender 4.2.
    - Run the script.
    ```
    *The animation will be generated with the default landmarks of the files 'test_landmarks_files.json'.*
+
    ```
    - Open the animation window.
    ```
+
    *You can now run the animation using the Timeline.*
    
 ## Contributing
