@@ -8,6 +8,9 @@ This repository is not finished yet, and there is still a lot to do and improve!
 
 For now, you can take a glance at the results with specific landmark files if you have Blender installed on your computer.
 
+This project generates results using data files prepared in the /data folder. The main script, blender_script.py, depends on these files. The scripts used to prepare these files are in the /scripts folder. They are not necessary to run the main script.
+
+
 ## Main challenges
 
 Challenges are various. Here are some relevant ones:
@@ -20,15 +23,18 @@ Challenges are various. Here are some relevant ones:
 The repository is structured as follows:
 ```
 /avatar_blender_mediapipe
-    /blender_script.py
-    /data/
-        - test_landmarks_files.json
-        - original_model.blend
-        /textures/
-            - face_skin.png
-            - mona2_Packed0_Diffuse.png
-            - mona2_Packed0_Gloss.png
-            - mona2_Packed0_Specular.png
+   /blender_script.py
+   /data/
+      - test_landmarks_files.json
+      - original_model.blend
+      /textures/
+         - face_skin.png
+         - mona2_Packed0_Diffuse.png
+         - mona2_Packed0_Gloss.png
+         - mona2_Packed0_Specular.png
+   /scripts/
+      - generate_landmarks.py
+      - requirements_scripts.txt
     - README.md
 ```
 
@@ -37,6 +43,10 @@ The repository is structured as follows:
 - **`/test_landmarks_files.json`**: JSON files of Mediapipe landmarks I have extracted from a video to test the script.
 - **`/original_model.blend`**: Blender files containing the prepared 3D model character to animate.
 - **`/textures/`**: Directory containing PNG images used to create texture of the 3D model character.
+- **`/scripts/`**: Directory containing utility scripts used to prepare the data files.
+- **`generate_landmarks.py`**:  Script for extracting and saving the landmarks from a video into a JSON file.
+- **`requirements_scripts.txt`** Dependencies required for the utility scripts.
+
 
 ## Getting Started
 
@@ -44,6 +54,9 @@ The repository is structured as follows:
 You need to have Blender installed on your computer.
 
 I worked on a windows computer with Blender 4.2. 
+
+To run the main script, make sure the files in the /data folder are present, and then simply execute:
+
 
 1. **Clone the Repository:**
    ```bash
