@@ -25,14 +25,15 @@ The repository is structured as follows:
 /avatar_blender_mediapipe
    /blender_script.py
    /data/
-      - test_landmarks_files.json
       - original_model.blend
+      - test_landmarks_files.json
       /textures/
          - face_skin.png
          - mona2_Packed0_Diffuse.png
          - mona2_Packed0_Gloss.png
          - mona2_Packed0_Specular.png
    /scripts/
+      - display_landmarks.py
       - generate_landmarks.py
       - requirements_scripts.txt
     - README.md
@@ -44,7 +45,8 @@ The repository is structured as follows:
 - **`/original_model.blend`**: Blender files containing the prepared 3D model character to animate.
 - **`/textures/`**: Directory containing PNG images used to create texture of the 3D model character.
 - **`/scripts/`**: Directory containing utility scripts used to prepare the data files.
-- **`generate_landmarks.py`**:  Script for extracting and saving the landmarks from a video into a JSON file.
+- **`display_landmarks.py`**:  Script to display the original video with the landmarks drawn on it, to check the landmarks JSON file.
+- **`generate_landmarks.py`**:  Script to extract and save the landmarks from a video into a JSON file.
 - **`requirements_scripts.txt`** Dependencies required for the utility scripts.
 
 
