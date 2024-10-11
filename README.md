@@ -33,6 +33,7 @@ The repository is structured as follows:
          - mona2_Packed0_Gloss.png
          - mona2_Packed0_Specular.png
    /scripts/
+      - create_original_face_mesh.py
       - display_landmarks.py
       - generate_landmarks.py
       - requirements_scripts.txt
@@ -45,6 +46,8 @@ The repository is structured as follows:
 - **`/original_model.blend`**: Blender files containing the prepared 3D model character to animate.
 - **`/textures/`**: Directory containing PNG images used to create texture of the 3D model character.
 - **`/scripts/`**: Directory containing utility scripts used to prepare the data files.
+- **`create_original_face_mesh.py`**: Script to create the face of the original 3D model character that will be use for the animation.
+- Note: The character model used is based on the predefined "Mona" model from BlenderKit. I suppress the orginal armature to create an armature adapted to Mediapipe keypoints. I also removed the original face mesh and create one adapted to Mediapipe keypoints.
 - **`display_landmarks.py`**:  Script to display the original video with the landmarks drawn on it, to check the landmarks JSON file.
 - **`generate_landmarks.py`**:  Script to extract and save the landmarks from a video into a JSON file.
 - **`requirements_scripts.txt`** Dependencies required for the utility scripts.
