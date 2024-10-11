@@ -129,7 +129,7 @@ def get_faces(edges):
     return faces_set
 
 
-# ---- EXECUTIONS ---- #
+# ---- EXECUTION ---- #
 # -------------------- #
 
 # ---- Load landmark data from JSON file and convert it to Blender coordinate reference
