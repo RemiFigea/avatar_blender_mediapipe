@@ -1,6 +1,7 @@
 import bpy
 import json
 import mathutils
+import os
 import socketio
 import sys
 
@@ -37,9 +38,9 @@ CHAIN_DICT = {
 # Dictionary of face auxiliaries object with associated target vertex groups ('Eye_R_Target', 'Eye_L_Target', 'Hair_Target') 
 # for calculating their offsets from the face.
 FACE_AUXILIARIES_OBJ_DICT = {
-    'eye_R': {'target_vertex_group': 'Eye_R_Target'},
-    'eye_L': {'target_vertex_group': 'Eye_L_Target'},
-    'hair': {'target_vertex_group':'Hair_Target'},
+    'eye_R': {'target_vertex_group_on_face': 'Eye_R_Target'},
+    'eye_L': {'target_vertex_group_on_face': 'Eye_L_Target'},
+    'hair': {'target_vertex_group_on_face':'Hair_Target'},
 }
 
 
@@ -134,7 +135,7 @@ def adjust_hand_to_arm_z_position(landmarks):
             
     return landmarks
 
-def get_scale_factor_and_translation_vector(original_model_armature, pose_landmarks, reference_bone_name):
+def get_armature_scale_factor_and_translation_vector(original_model_armature, pose_landmarks, reference_bone_name):
     '''
     Calculate the scale factor and translation vector to align a specified bone 
     in the given armature with the corresponding bone in the pose_landmarks.
@@ -322,7 +323,7 @@ def get_vertex_index(mesh_obj, vertex_group_name):
     
     return vertex_ind
 
-def get_vertex_coords(obj, vertex_ind):
+def get_vertex_world_coords(obj, vertex_ind):
     '''
     Returns the world coordinates of a vertex from a mesh object, taking into account
     modifiers and shape keys.
@@ -349,6 +350,24 @@ def get_vertex_coords(obj, vertex_ind):
     return co_world
 
 def render_callback(scene, context):
+    '''
+    Emit the rendering progress of a scene as a percentage.
+
+    This function calculates the current rendering progress based on the scene's 
+    frame range and emits the progress to a connected client via a socket. 
+    If no client is connected, it prints a notification to the console.
+
+    Parameters
+    ----------
+    scene : bpy.types.Scene
+        The Blender scene being rendered.
+    context : bpy.types.Context
+        The current Blender context.
+
+    Returns
+    -------
+    None
+    '''
     try:
         progress = int(100 * (scene.frame_current - scene.frame_start)  / (scene.frame_end - scene.frame_start))
         if sio.connected:
@@ -358,10 +377,78 @@ def render_callback(scene, context):
     except:
         print('Progress not available.')
 
+class FaceAuxiliaries:
+    '''
+    Class to handle face auxiliaries object such as eyes and hair.
+
+    Attributes
+    ----------
+    name : str
+        The name of the face auxiliary.
+    target_vertex_group_on_face : str
+        The vertex group associated with this auxiliary on the face mesh.
+    obj : bpy.types.Object or None
+        The Blender object associated with the face auxiliary, if found.
+    target_vertex_ind : int or None
+        The index of the target vertex on the face mesh.
+    original_offset_with_face : mathutils.Vector or None
+        The offset of the auxiliary object from its target vertex on the face mesh.
+    '''
+    def __init__(self, name, target_vertex_group_on_face):
+        '''
+        Parameters:
+        -----------
+        name : str
+            The name of the face auxiliary.
+        target_vertex_group_on_face : str
+            The vertex group associated with this auxiliary on the face mesh.
+        '''
+        self.name = name
+        self.target_vertex_group_on_face = target_vertex_group_on_face
+        self.obj = None
+        self.target_vertex_ind = None
+        self.original_offset_with_face = None
+    
+    def get_associated_obj_in_the_scene(self):
+        '''
+        Finds and returns the associated object in the Blender scene that matches the auxiliary's name.
+        '''
+        for obj in bpy.context.view_layer.objects:
+            if (obj and obj.type == 'MESH' and self.name in obj.name): 
+                self.obj = obj
+                return self.obj
+        return None
+
 class  SceneManager:
+    '''
+    Class to manage all transformation applyed to object in blender scene object.
+    
+    Attributes
+    ----------
+    scene : bpy.types.Scene
+        The Blender scene object being managed.
+    chain_dict : dict
+        A dictionary mapping body subdivision names to sub-dictionaries, 
+        where each sub-dictionary maps a chain name to a list of pairs of Mediapipe keypoint IDs 
+        [start_id, end_id], representing bone connections.
+    face_auxiliaries_list : list
+        A list of face auxiliary objects, each an instance of the FaceAuxiliaries class.
+    '''
+
     def __init__(self, scene_name, chain_dict):
+        '''
+        Parameters:
+        -----------
+        scene_name: str
+            Name of the Blender scene object to create.
+        chain_dict : dict
+            A dictionary mapping body subdivision names to sub-dictionaries, 
+            where each sub-dictionary maps a chain name to a list of pairs of Mediapipe keypoint IDs 
+            [start_id, end_id], representing bone connections.
+        '''
         self.scene = bpy.data.scenes.new(scene_name)
         self.chain_dict = chain_dict
+        self.face_auxiliaries_list = []
         bpy.context.window.scene = self.scene
     
     def load_original_3D_model(self, model_filepath):
@@ -386,6 +473,11 @@ class  SceneManager:
             for obj in data_to.objects:
                 if obj is not None:
                     scene.collection.objects.link(obj)
+                    bpy.context.view_layer.objects.active = obj
+                    obj.select_set(True)
+                    # Ensure the original reference scaling rate is 1, usefull for futur resizing
+                    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+                    obj.select_set(False)  # S'assurer que l'objet est actif
 
             bpy.context.view_layer.update()
         
@@ -405,7 +497,6 @@ class  SceneManager:
 
         if armature:
             bpy.context.view_layer.objects.active = armature
-            print(f'Armature name selected: {armature.name}')
         else:
             print('No armature found')
         
@@ -425,62 +516,64 @@ class  SceneManager:
         if not face_mesh_obj:
             print('face object not found.')
         
-        return face_mesh_obj
+        return face_mesh_obj   
 
-    def update_face_auxiliaries_obj_dict(self, face_auxiliaries_obj_dict):
+    def initialize_face_auxiliaries_list(self, face_auxiliaries_obj_dict):
         '''
-        Compute and update the offset of each face accessory relative to its target vertex in the in the face mesh of the scene.
-
         Parameters:
         -----------
         face_auxiliaries_obj_dict: dict
-            Dictionary mapping each face auxiliary object to its target vertex group in the face mesh.
-
+            A dictionary where keys are names of face auxiliaries 
+                                           and values are dictionaries containing properties 
+                                           such as 'target_vertex_group_on_face'.
         Returns:
-        --------
-        dict
-            Updated face_accessories_dict with 'original_offset' and 'target_vertex_ind' for each accessory.
+        self.face_auxiliaries_list: list
+             A list of face auxiliary objects, each an instance of the FaceAuxiliaries class.
         '''
-        updated_face_auxiliaries_obj_dict = face_auxiliaries_obj_dict.copy()
 
-        face_mesh_obj = self.get_face_mesh()
+        for name, subdict in face_auxiliaries_obj_dict.items():
+            target_vertex_group_on_face = subdict.get('target_vertex_group_on_face')
+            face_auxiliary = FaceAuxiliaries(name, target_vertex_group_on_face)
+     
+            self.face_auxiliaries_list.append(face_auxiliary)
         
-        # Loop over each accessory's name in the updated dictionary
-        for accessory_name in updated_face_auxiliaries_obj_dict.keys():
-            
-            # Retrieve the target vertex group name for the current accessory
-            target_vertex_group_name = updated_face_auxiliaries_obj_dict[accessory_name].get('target_vertex_group')
-        
-            accessory_obj = None
-            
-            # Find the accessory object corresponding to the current accessory_name
-            for obj in bpy.context.view_layer.objects:
-                if (obj and obj.type == 'MESH'): 
-                    if accessory_name in obj.name:
-                        accessory_obj = obj
-                        break
-
-            if accessory_obj:
-                # Store the original world location of the parent object
-                world_parent_original_location = accessory_obj.location.copy()
-
-                # ---- Retrieve the original location of the associated target vertex in world coordinates
-                target_vertex_ind = get_vertex_index(face_mesh_obj, target_vertex_group_name)
-                world_target_vertex_group_original_location = get_vertex_coords(face_mesh_obj, target_vertex_ind)
-
-                original_offset = world_parent_original_location - world_target_vertex_group_original_location
-
-                updated_face_auxiliaries_obj_dict[accessory_name]['original_offset'] = original_offset
-                updated_face_auxiliaries_obj_dict[accessory_name]['target_vertex_ind'] = target_vertex_ind
-
-            else:
-                print(f'{accessory_obj} not found.')
-
-        return updated_face_auxiliaries_obj_dict
+        return self.face_auxiliaries_list
     
+    def update_face_auxiliaries_list(self):
+        '''
+        Extracts and updates data from the 3D original model configuration in the scene.
+
+        This method updates the following attributes of the elements in the 
+        'face_auxiliaries_list':
+            - 'target_vertex_ind': The index of the target vertex on the face mesh.
+            - 'world_target_vertex_group_original_location': The world coordinates of the associated target vertex.
+            - 'original_offset_with_face': The offset between the original location of the face auxiliary and the target vertex.
+        '''
+        face_mesh_obj = self.get_face_mesh()
+
+        if not face_mesh_obj:
+            print('Face mesh object not found.')
+            return
+
+        for face_auxiliary in self.face_auxiliaries_list:
+
+            face_auxiliary.target_vertex_ind = get_vertex_index(face_mesh_obj, face_auxiliary.target_vertex_group_on_face)
+
+
+            face_auxiliary.get_associated_obj_in_the_scene()
+            
+            if face_auxiliary.obj:
+                world_face_auxiliary_original_location = face_auxiliary.obj.location.copy()
+                face_auxiliary.world_target_vertex_group_original_location = get_vertex_world_coords(face_mesh_obj, face_auxiliary.target_vertex_ind).copy()
+
+                face_auxiliary.original_offset_with_face = world_face_auxiliary_original_location - face_auxiliary.world_target_vertex_group_original_location
+            else:
+                print(f'Face auxiliary object {face_auxiliary.name} not found.')
+
     def get_mapped_landmarks(self, landmarks_filepath):
         '''
         Maps body chain landmarks from a file with the armature of the scene.
+        Note: Landmarks corresping to armature are adjusted to the original 3D model.
 
         Parameters:
         -----------
@@ -509,7 +602,7 @@ class  SceneManager:
         # Set the reference bone name for scaling and translation
         reference_bone_name = 'arm_L_0'
 
-        scale_factor, translation_vector = get_scale_factor_and_translation_vector(armature, pose_landmarks, reference_bone_name)
+        scale_factor, translation_vector = get_armature_scale_factor_and_translation_vector(armature, pose_landmarks, reference_bone_name)
         
         # Loop over each body subdivision specified in the chain dictionnary
         for body_subdivision, chain_sub_dict in chain_dict.items():
@@ -557,14 +650,58 @@ class  SceneManager:
 
         return lm_dict
 
+    def get_face_scale_factor(self, face_landmarks):
+        '''
+        Calculate the scaling factor to apply to face landmarks to match distance between to eye in the landmarks with original 3D model
+        
+        Parameters:
+        ----------
+        face_landmarks: dict
+            Dictionary of face landmarks with each keypoint as a vector.
+
+        Return:
+        -------
+        scale_factor: float
+            The scaling factor to be applied to the face landmarks. 
+            Returns 1.0 if no landmarks are detected or if there is an error in detection.
+        '''
+        scale_factor = 1
+
+        if not face_landmarks:
+            print('No face landmarks detected. Face not resized')
+            return scale_factor
+
+        original_eye_location_dict = {}
+        eye_location_dict = {}
+
+        first_frame_ind = min(map(int, face_landmarks.keys()))
+
+        for face_auxiliary in self.face_auxiliaries_list:
+            if face_auxiliary.name in ['eye_R', 'eye_L']:
+                original_eye_location_dict[face_auxiliary.name] = face_auxiliary.world_target_vertex_group_original_location.copy()
+                eye_location_dict[face_auxiliary.name] = face_landmarks[str(first_frame_ind)].get(str(face_auxiliary.target_vertex_ind)).copy()
+
+                if eye_location_dict[face_auxiliary.name] is None:
+                    print('Vertex group coordinate empty. Face not rezised')
+                    return scale_factor
+
+        if len(original_eye_location_dict)!=2:
+            print('Error in original model eye detection. Not exactly to eye are detected. Face not resied')
+            return scale_factor
+        
+        original_distance_between_eye = (original_eye_location_dict.get('eye_R') - original_eye_location_dict.get('eye_L')).length
+        first_frame_distance_between_eye = (eye_location_dict.get('eye_R') - eye_location_dict.get('eye_L')).length
+
+        scale_factor = original_distance_between_eye / first_frame_distance_between_eye
+
+        return scale_factor
+    
     def adapt_face_landmarks_to_original_3D_model(self, face_landmarks):
         '''
         Adjust face landmarks to align the 'Chin_Target' vertex in both the landmarks and the face mesh object in the scene.
 
         Parameters:
         -----------
-        face_mesh_obj: bpy.types.Object
-            The Blender mesh object used to align the face landmarks.
         face_landmarks: dict
             Dictionary of face landmarks with each keypoint as a vector.
 
@@ -572,30 +709,33 @@ class  SceneManager:
         --------
         None
         '''
-        face_mesh_obj = self.get_face_mesh()
+        face_mesh_obj = self.get_face_mesh()      
+        scale_factor = self.get_face_scale_factor(face_landmarks)
 
         # Get the vertex index for the chin target from the face mesh
         chin_vertex_id = get_vertex_index(face_mesh_obj, 'Chin_Target')
 
         # The position of the chin is used to specify the position of the face
-        world_face_original_location = get_vertex_coords(face_mesh_obj, chin_vertex_id)
+        world_face_original_location = get_vertex_world_coords(face_mesh_obj, chin_vertex_id)
         local_face_original_location = face_mesh_obj.matrix_world.inverted() @ world_face_original_location
 
-        # Extract the indices of frames containing face landmarks and get the dictionnary corresponding to the first frame index 
-        face_frame_idx = list(map(int, face_landmarks.keys()))
-        first_face_lm_frame_ind = min(face_frame_idx)
+        if not face_landmarks:
+            print('No face landmarks detected. Face not adapated to original')
+            return
+        first_face_lm_frame_ind = min(map(int, face_landmarks.keys()))
         first_face_lm_frame_dict = face_landmarks.get(str(first_face_lm_frame_ind))
 
         # Get the face location for the first frame, based on the chin vertex ID
         first_frame_face_location = first_face_lm_frame_dict.get(str(chin_vertex_id)).copy()
+        rescaled_first_frame_face_location = first_frame_face_location * scale_factor
 
         # Calculate the offset needed to align the face with the local reference position for shape keys
-        offset = first_frame_face_location - local_face_original_location
+        offset = rescaled_first_frame_face_location - local_face_original_location
 
-        # Apply the calculated offset to all keypoints in the face landmarks for every frame
+        # Apply the calculated offset and scaling factor to all keypoints in the face landmarks for every frame
         for face_lm_frame_dict in  face_landmarks.values():
             for keypoint in face_lm_frame_dict.keys():
-                face_lm_frame_dict[keypoint] = face_lm_frame_dict[keypoint] - offset
+                face_lm_frame_dict[keypoint] = face_lm_frame_dict.get(keypoint) * scale_factor - offset
 
     def apply_stretch_to_contraints_to_bones(self):
         '''
@@ -661,19 +801,16 @@ class  SceneManager:
                     stretch_constraint.target = armature
                     stretch_constraint.subtarget = target_pose_bone.name
 
-    def hidden_each_bone_of_the_chain(self, chain_name, frame_ind):
+    def hidden_each_bone_of_the_chain(self, chain_name):
         '''
         Selected the armature in the scene.
         Selected the chain associated to the given chain_name.
-        Hidden each armature bone of the chain from frame 1 to `frame_ind` (included). 
-        Bones containing 'extra' in their name are hidden for all frames, as they are used only for animation support.
+        Hidden each armature bone of the chain from frame 1.
 
         Parameters:
         -----------
         chain_name: str
             The name of the bone chain to process.
-        frame_ind: str or int
-            Frame number from which bones (except 'extra' bones) will become visible.
 
         Returns:
         --------
@@ -695,10 +832,6 @@ class  SceneManager:
             pose_bone.bone.hide = True
             pose_bone.bone.keyframe_insert(data_path="hide", frame=1)
 
-            # ---- Set bone to visible from frame frame_ind + 1
-            pose_bone.bone.hide = False
-            pose_bone.bone.keyframe_insert(data_path="hide", frame=int(frame_ind)+1)
-
         # Set to invisible extra bone of the given chain from frame 1
         # Note: Chains 'arm_L' and 'arm_R' do not contain extra bones
         if (chain_name != 'arm_L') and (chain_name != 'arm_R'):
@@ -716,7 +849,7 @@ class  SceneManager:
         Parameters:
         -----------
         lm_dict : dict
-         Dictionary mapping each chain to its landmark across frames.
+            Dictionary mapping each chain to its landmark across frames.
         '''
         chain_dict = self.chain_dict
 
@@ -728,10 +861,11 @@ class  SceneManager:
             # Loop over each chain
             for chain_name in chain_sub_dict.keys():
 
-                frame_idx = list(map(int, lm_dict.get(chain_name).keys()))
-                max_frame_ind = max(frame_idx)
+                if lm_dict[chain_name]=={}:
+                    print(f'{chain_name} is not detected on the video')
+                    continue
 
-                self.hidden_each_bone_of_the_chain(chain_name, max_frame_ind)
+                self.hidden_each_bone_of_the_chain(chain_name)
 
                 # Generate keyframe for each frame of the current chain
                 for frame_ind in lm_dict.get(chain_name).keys():
@@ -751,8 +885,6 @@ class  SceneManager:
 
         Parameters:
         -----------
-        face_mesh_obj: bpy.types.Object
-            The Blender face mesh object to which shape keys will be added.
         face_landmarks: dict
             Dictionary where each key is a frame index, and each value is a sub-dictionary mapping keypoint IDs to their vector coordinates.
         Returns:
@@ -812,7 +944,7 @@ class  SceneManager:
                 key_block.value = 0
                 key_block.keyframe_insert(data_path="value", frame=1)
 
-    def generate_face_accessories_keyframes(self, face_landmarks, update_face_accessories_dict):
+    def generate_face_accessories_keyframes(self, face_landmarks):
         '''
         Animate face accessories in the scene by applying their offset relative to the target vertex for each frame.
 
@@ -820,10 +952,6 @@ class  SceneManager:
         -----------
         face_landmarks: dict
             Dictionary where each key is a frame index, and each value is a sub-dictionary mapping keypoint IDs to their vector coordinates.
-        face_mesh_obj: bpy.types.Object
-            The Blender face mesh object used as reference for calculating accessory positions.
-        update_face_accessories_dict: dict
-            Dictionary containing face accessories information, including target vertex indices and offsets.
 
         Returns:
         --------
@@ -836,29 +964,27 @@ class  SceneManager:
 
             bpy.context.scene.frame_set(int(frame_ind))
         
-            # Loop over face accessory object
-            for accessory_name in update_face_accessories_dict.keys():
+            # Loop over face auxiliary object
+            for original_model_auxiliary in self.face_auxiliaries_list:
 
-                # Select the current accessory object in the scene
-                accessory_obj = None
+                # Select the current face auxiliary object in the scene
+                face_auxiliary = None
                 for obj in bpy.context.view_layer.objects:
                     if obj and obj.type == 'MESH': 
-                        if accessory_name in obj.name:
-                            accessory_obj = obj
+                        if original_model_auxiliary.name in obj.name:
+                            face_auxiliary = obj
 
-                if accessory_obj:
+                if face_auxiliary:
 
-                    # ---- Get the target vertex position of the current accessory object for the current frame
-                    target_vertex_ind = update_face_accessories_dict[accessory_name]['target_vertex_ind']
-                    world_target_vertex_coord = get_vertex_coords(face_mesh_obj, vertex_ind=target_vertex_ind)
+                    # ---- Get the target vertex position of the current face auxiliary object for the current frame
+                    world_target_vertex_coord = get_vertex_world_coords(face_mesh_obj, original_model_auxiliary.target_vertex_ind)
 
-                    # ---- Specify the position to the accessory object for the current frame
-                    original_offset = update_face_accessories_dict[accessory_name]['original_offset']
-                    accessory_obj.location = world_target_vertex_coord + original_offset
-                    accessory_obj.keyframe_insert(data_path="location", frame=int(frame_ind))
+                    # ---- Specify the position to the face auxiliary object for the current frame
+                    face_auxiliary.location = world_target_vertex_coord + original_model_auxiliary.original_offset_with_face
+                    face_auxiliary.keyframe_insert(data_path="location", frame=int(frame_ind))
 
                 else:
-                    print(f'{accessory_obj} not found.')
+                    print(f'{ face_auxiliary} not found.')
 
     def create_world_for_rendering(self, bg_color=(0, 0, 0, 0), intensity=1):
         '''
@@ -934,6 +1060,7 @@ class  SceneManager:
         scene.render.resolution_y = 360
         scene.render.resolution_percentage = 100
 
+        os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
         scene.render.filepath = output_filepath
 
         # ---- Specifiy the frame range for the video generation
@@ -958,9 +1085,12 @@ def main(filepath):
 
     scene.load_original_3D_model(MODEL_FILEPATH)
 
-    # Get the initial offset of both eyes and hair relative to the face in the original 3D model. We called this object auxilaries object
+    # Eyes and hair are considered as face auxiliaries object
+    scene.initialize_face_auxiliaries_list(FACE_AUXILIARIES_OBJ_DICT)
+    
+    # Get the initial offset of face auxilaries object with the face in the original 3D model.
     # Later, we will ensure that the eyes and hair maintain this offset relative to the face throughout the animation
-    updated_face_auxiliaries_obj_dict = scene.update_face_auxiliaries_obj_dict(FACE_AUXILIARIES_OBJ_DICT)
+    scene.update_face_auxiliaries_list()
 
     # Resize an reorganize armature landmarks to match with original model armature size and position for each specified chain in CHAIN DICT
     lm_dict = scene.get_mapped_landmarks(filepath)
@@ -975,7 +1105,7 @@ def main(filepath):
 
     scene.generate_face_shape_keys(face_landmarks)
 
-    scene.generate_face_accessories_keyframes(face_landmarks, updated_face_auxiliaries_obj_dict)
+    scene.generate_face_accessories_keyframes(face_landmarks)
 
     scene.create_world_for_rendering()
 
@@ -987,16 +1117,14 @@ def main(filepath):
     max_frame_ind = max(
         max(map(int, lm_dict[chain_name].keys()))
         for chain_name in lm_dict
-    )
+        if lm_dict[chain_name]
+        )
 
     scene.generate_video(VIDEO_OUTPUT_PATH, max_frame_ind)
-
-    sio.disconnect()
 
 
 if __name__ == "__main__":
 
-    # Connect to server to send callback when loading the video
     sio = socketio.Client()
     sio.connect('http://localhost:5000')
 
@@ -1004,3 +1132,5 @@ if __name__ == "__main__":
     print(f'File {landmarks_filepath} has been added')
 
     main(landmarks_filepath)
+    
+    sio.disconnect()
