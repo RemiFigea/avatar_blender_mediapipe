@@ -9,9 +9,6 @@ import sys
 # ---- CONSTANTS ---- #
 # ------------------- #
 
-MODEL_FILEPATH = '/data/original_model.blend'
-VIDEO_OUTPUT_PATH = '/static/generated_video.mp4'
-
 # Defines keypoint chains for building bones, using Mediapipe keypoint IDs
 # Each chain is a list of keypoint pairs [start_id, end_id], representing bone connections
 CHAIN_DICT = {
@@ -1078,12 +1075,12 @@ class  SceneManager:
         
         print(f'Rendering completed. Video file saved at: {output_filepath}')
 
-def main(filepath):
+def main(landmarks_filepath, original_model_filepath, video_output_path):
 
     # Create the scene
     scene = SceneManager("New_scene", CHAIN_DICT)
 
-    scene.load_original_3D_model(MODEL_FILEPATH)
+    scene.load_original_3D_model(original_model_filepath)
 
     # Eyes and hair are considered as face auxiliaries object
     scene.initialize_face_auxiliaries_list(FACE_AUXILIARIES_OBJ_DICT)
@@ -1093,7 +1090,7 @@ def main(filepath):
     scene.update_face_auxiliaries_list()
 
     # Resize an reorganize armature landmarks to match with original model armature size and position for each specified chain in CHAIN DICT
-    lm_dict = scene.get_mapped_landmarks(filepath)
+    lm_dict = scene.get_mapped_landmarks(landmarks_filepath)
 
     face_landmarks = lm_dict['face']
 
@@ -1120,17 +1117,16 @@ def main(filepath):
         if lm_dict[chain_name]
         )
 
-    scene.generate_video(VIDEO_OUTPUT_PATH, max_frame_ind)
+    scene.generate_video(video_output_path, max_frame_ind)
 
 
 if __name__ == "__main__":
 
     sio = socketio.Client()
     sio.connect('http://localhost:5000')
+ 
+    landmarks_filepath, original_model_filepath, video_output_path   =  sys.argv[-3:]
 
-    landmarks_filepath = sys.argv[-1] # The landmarks_filepath is the last element of the list
-    print(f'File {landmarks_filepath} has been added')
-
-    main(landmarks_filepath)
+    main(landmarks_filepath, original_model_filepath, video_output_path)
     
     sio.disconnect()

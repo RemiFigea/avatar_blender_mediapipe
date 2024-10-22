@@ -1,9 +1,13 @@
-FROM python:3.12-slim
+#FROM python:3.10.12-slim
+FROM python:3.11.5-slim
+
 
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install ffmpeg libsm6 libxext6 wget xz-utils libegl1-mesa libgl1-mesa-glx -y && \
     apt-get clean
+
+RUN python -m pip install --upgrade pip
 
 # Install the dependancies
 COPY requirements.txt /
@@ -15,7 +19,9 @@ RUN wget https://download.blender.org/release/Blender4.2/blender-4.2.2-linux-x64
     mv blender-4.2.2-linux-x64 /opt/blender && \
     rm blender-4.2.2-linux-x64.tar.xz
 
+
 # Install the dependancies in Blender environnement
+RUN /opt/blender/4.2/python/bin/python3.11 -m pip install --upgrade pip
 RUN /opt/blender/4.2/python/bin/python3.11 -m pip install -r /requirements.txt
 
 # Copy the code files
