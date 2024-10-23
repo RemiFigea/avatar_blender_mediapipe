@@ -2,7 +2,7 @@ import cv2
 import json
 import mediapipe as mp
 import os
-from scripts.blender import CHAIN_DICT
+from scripts.generate_video import CHAIN_DICT
 
 class VideoProcess:
     def __init__(self, video_path, chain_dict, start_frame, end_frame):
@@ -331,6 +331,7 @@ def get_video_landmarks(video_process, world_landmarks=False):
 def generate_landmarks_file(
         input_video_path,
         landmarks_filepath,
+        queue,
         chain_dict=CHAIN_DICT,
         start_frame=1,
         end_frame=-1,
@@ -345,6 +346,9 @@ def generate_landmarks_file(
         Path to the video.
     landmarks_filepath: str
         Path to the file to store the resuts.
+    queue: multiprocessing.Queue
+        Queue used to communicate between processes. Once the landmarks extraction is complete, the string "landmarks_done" 
+        is placed into the queue.
     chain_dict: dict
             Dictionary containing sub-dictionaries. Each sub-dictionary maps body chain names to lists of keypoint ID pairs.
     start_frame: int, optional (default=1)
@@ -365,6 +369,8 @@ def generate_landmarks_file(
 
     with open(landmarks_filepath, 'w') as f:
         json.dump(video_landmarks, f, indent=4)
+    
+    queue.put('Landmarks generation terminated successfully.')
 
 
 

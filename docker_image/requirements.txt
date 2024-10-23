@@ -5,3 +5,4 @@ mediapipe==0.10.14
 opencv-python==4.10.0.84
 protobuf==4.25.5
 TIME-python==0.0.17
+websocket-client==1.8.0

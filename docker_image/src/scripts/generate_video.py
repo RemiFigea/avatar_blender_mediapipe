@@ -1072,8 +1072,10 @@ class  SceneManager:
         bpy.app.handlers.render_pre.append(render_callback)
 
         bpy.ops.render.render(animation=True, use_viewport=True, scene=scene.name)
+
+        sio.emit('message', 'Video generation terminated successfully.')
         
-        print(f'Rendering completed. Video file saved at: {output_filepath}')
+        print(f'Video generation terminated successfully. Video file saved at: {output_filepath}')
 
 def main(landmarks_filepath, original_model_filepath, video_output_path):
 
@@ -1123,7 +1125,7 @@ def main(landmarks_filepath, original_model_filepath, video_output_path):
 if __name__ == "__main__":
 
     sio = socketio.Client()
-    sio.connect('http://localhost:5000')
+    sio.connect('http://127.0.0.1:5000')
  
     landmarks_filepath, original_model_filepath, video_output_path   =  sys.argv[-3:]
 

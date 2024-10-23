@@ -2,43 +2,32 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Video Animation</title>
-    <!-- <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script> -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.min.js"></script> -->
 </head>
 
 <body>
     <h1>Video Animation</h1>
-
 
     <form action="{{ url_for('upload_video') }}" method="POST" enctype="multipart/form-data">
         <label for="video_file">Upload Video</label>
         <input type="file" id="video_file" name="video_file" accept="video/*" required>
         <button type="submit">Upload</button>
     </form>
-    
 
     <p id="message">Waiting for a video</p>
-
-
-    <script>
-        var socket = io('http://localhost:5000');
-        socket.on('redirect', function(url) {
-            window.location.href = url;
-        });
-        // socket.on('connect', function() {
-        //     console.log('Connected to server');
-        // });
-        // socket.on('disconnect', function() {
-        //     console.log('Disconnected from server');
-        // });  
-        socket.on('message', function(msg) {
-            console.log('Message from server: ' + msg);
-            document.getElementById('message').innerText += '<p>' + msg + '</p>';
-        });
-    </script>
+    
+<script>
+    var socket = io();
+    socket.on('message', function(msg) {
+        console.log('Message from server: ' + msg);
+        // Ajouter le message au DOM
+        document.getElementById('message').innerHTML += '<p>' + msg + '</p>';
+    });
+</script>
 
     <video width="800" height="600" controls>
         <source src="{{ url_for('static', filename=video_name) }}" type="video/mp4">
