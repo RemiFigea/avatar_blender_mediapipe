@@ -16,7 +16,7 @@ PATHS_DICT = {
     'original_model': './data/original_model.blend',
 }
 
-ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm'}
 
 app = Flask(__name__)
 #app.config['SECRET_KEY'] = os.urandom(24)
@@ -61,7 +61,7 @@ def upload_video():
     stop_video_generation_if_running(video_process, socketio)
  
     try: 
-        socketio.emit('message', 'Starting landamrks generation.')
+        socketio.emit('message', 'Generating landmarks...')
         landmark_process = Process(
             target=generate_landmarks_file,
             args=(uploaded_video_filepath, PATHS_DICT.get('landmarks'), process_queue, )
@@ -86,7 +86,7 @@ def upload_video():
                 PATHS_DICT.get('original_model'),
                 PATHS_DICT.get('generated_video')
             ]
-            socketio.emit('message', 'Starting video generation.')
+            socketio.emit('message', 'Starting video generation...')
 
             try:
                 video_process = subprocess.Popen(command)

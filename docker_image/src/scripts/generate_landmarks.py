@@ -276,7 +276,7 @@ def get_video_landmarks(video_process, world_landmarks=False):
     face_lm_dict = {}
 
     # Iterate over the frames and collect landmarks
-    while cap.isOpened() and frame_index <= end_frame:
+    while cap.isOpened(): #and frame_index <= end_frame: #problem with total_frames_count when video is .WEBM
         # Read the current frame
         ret, frame = cap.read()
 

@@ -163,22 +163,30 @@ def get_armature_scale_factor_and_translation_vector(original_model_armature, po
     # ---- Retrieve the length of the reference bone based on landmarks in the first frame that have values.
     frame_idx_sorted = sorted(list(map(int, pose_landmarks.keys())))
 
+    landmarks_bone_length = 0
+
     for frame_ind in frame_idx_sorted:
-
         if pose_landmarks.get(str(frame_ind)) != {}:
-
             head = pose_landmarks[str(frame_ind)].get('12')
             tail = pose_landmarks[str(frame_ind)].get('14')
-            landmarks_bone_length = (head-tail).length
-            break
+
+            if head and tail:
+                landmarks_bone_length = (head-tail).length
+                break
+
+    if landmarks_bone_length == 0:
+        scale_rate = 1
+        translation_vector = mathutils.Vector((0, 0, 0))
+        sio.emit('Reference bone use to rescale armature not detected. Armature not rescaled.')
     
+    else:
+        scale_rate = original_model_bone_length/landmarks_bone_length
+        scaled_bone_head = scale_rate * head
 
-    scale_rate = original_model_bone_length/landmarks_bone_length
+        scaled_bone_head = scale_rate * head
+        armature_bone_head = original_model_armature_bone.head
 
-    scaled_bone_head = scale_rate * head
-    armature_bone_head = original_model_armature_bone.head
-
-    translation_vector = armature_bone_head - scaled_bone_head + mathutils.Vector((0, - 0.02, 0)) # we had a small offset after checking the animation
+        translation_vector = armature_bone_head - scaled_bone_head + mathutils.Vector((0, - 0.02, 0)) # we had a small offset after checking the animation
 
     return scale_rate, translation_vector
 
@@ -891,7 +899,11 @@ class  SceneManager:
         face_mesh_obj = self.get_face_mesh()
 
         bpy.ops.object.mode_set(mode='OBJECT')
-        face_frame_idx = list(map(int, face_landmarks.keys()))
+        non_empty_face_frames_idx = list(map(int, [frame for frame, lm in face_landmarks.items() if lm]))
+
+        if non_empty_face_frames_idx == []:
+            sio.emit('No face detected.')
+            return
     
         # ---- Create the basis shape key ---- #
 
@@ -900,7 +912,7 @@ class  SceneManager:
 
         # ---- Assign the values of first frame landmarks to the basis shape key
         #
-        basis_shape_key.data.foreach_set("co", [lm for landmarks in face_landmarks.get(str(min(face_frame_idx))).values() for lm in landmarks])
+        basis_shape_key.data.foreach_set("co", [lm for landmarks in face_landmarks.get(str(min(non_empty_face_frames_idx))).values() for lm in landmarks])
 
         # ---- Generate a specific shape key for each frame ---- #
 
@@ -926,10 +938,10 @@ class  SceneManager:
             #
             face_mesh_obj.data.shape_keys.key_blocks[f'Frame_{frame_ind}_Shape'].value = 0
 
-            if int(frame_ind) < max(face_frame_idx):
+            if int(frame_ind) < max(non_empty_face_frames_idx):
                 face_mesh_obj.data.shape_keys.key_blocks[f'Frame_{frame_ind}_Shape'].keyframe_insert(data_path="value", frame=int(frame_ind)+1)
 
-            if int(frame_ind) > min(face_frame_idx):
+            if int(frame_ind) > min(non_empty_face_frames_idx):
                 face_mesh_obj.data.shape_keys.key_blocks[f'Frame_{frame_ind}_Shape'].keyframe_insert(data_path="value", frame=int(frame_ind)-1)
 
         # ---- Go back to the first frame and set to 0 the value of all shape keys except the basis shape and generate the keyframes
@@ -1114,9 +1126,10 @@ def main(landmarks_filepath, original_model_filepath, video_output_path):
     
     # Get the upper index of the frame
     max_frame_ind = max(
-        max(map(int, lm_dict[chain_name].keys()))
+        (max(map(int, lm_dict[chain_name].keys()), default=1)
         for chain_name in lm_dict
-        if lm_dict[chain_name]
+        if lm_dict[chain_name]),
+        default=1
         )
 
     scene.generate_video(video_output_path, max_frame_ind)

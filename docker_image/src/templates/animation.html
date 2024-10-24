@@ -6,32 +6,154 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Video Animation</title>
     <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
-    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.min.js"></script> -->
 </head>
 
 <body>
     <h1>Video Animation</h1>
 
-    <form action="{{ url_for('upload_video') }}" method="POST" enctype="multipart/form-data">
-        <label for="video_file">Upload Video</label>
-        <input type="file" id="video_file" name="video_file" accept="video/*" required>
-        <button type="submit">Upload</button>
-    </form>
+    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 10px;">
+        <form id="uploadForm" action="{{ url_for('upload_video') }}" method="POST" enctype="multipart/form-data" style="display: flex; align-items: center;">
+            <label for="video_file" style="margin-right: 10px;">Télécharger une vidéo</label>
+            <input type="file" id="video_file" name="video_file" accept="video/*" required style="margin-right: 10px;">
+            <button type="submit">Uploader</button>
+        </form>
+        
+        <video id="liveVideo" width="320" height="240" autoplay style="display: none;"></video>
+        <div style="display: flex; align-items: center; gap: 10px; justify-content: flex-start;">
+            <span style="margin: 0px;">Or Record a Video</span>
+            <button id="startCamera">Start Camera</button>
+            <button id="startRecording" disabled>Start Recording</button>
+            <button id="stopRecording" disabled>Stop Recording</button>
+            <button id="saveRecording" disabled>Save Recording</button>
+        </div>
+    </div>
 
-    <p id="message">Waiting for a video</p>
+    <p id="message">Please upload or record your video</p>
+
+    <script>
+        
+        var socket = io();
+        socket.on('message', function(msg) {
+            console.log('Message from server: ' + msg);
+            document.getElementById('message').innerHTML = '<p>' + msg + '</p>';
+        });
+
+        document.getElementById('uploadForm').addEventListener('submit', function(event) {
+            event.preventDefault(); // Prevents the page from reloading
     
-<script>
-    var socket = io();
-    socket.on('message', function(msg) {
-        console.log('Message from server: ' + msg);
-        // Ajouter le message au DOM
-        document.getElementById('message').innerHTML += '<p>' + msg + '</p>';
-    });
-</script>
+            const formData = new FormData(this);
+    
+            fetch('{{ url_for("upload_video") }}', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.redirected) {
+                window.location.href = response.url;
+                }
+                else if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error('Error during video uploading.');
+                }
+            })
+            .then(data => {
+                console.log('Upload réussi :', data);
+                
+            })
+            .catch(err => {
+                console.error('Erreur :', err);
+            });
+        });
 
-    <video width="800" height="600" controls>
-        <source src="{{ url_for('static', filename=video_name) }}" type="video/mp4">
-        Your browser does not support the video tag.
-    </video>
+        // Define variable for the video recording
+        let mediaRecorder;
+        let recordedChunks = [];
+        let localStream;  //
+
+        // Access to camera and display the recording in live
+        const startCameraButton = document.getElementById('startCamera');
+        const startRecordingButton = document.getElementById('startRecording');
+        const stopRecordingButton = document.getElementById('stopRecording');
+        const saveRecordingButton = document.getElementById('saveRecording');
+        const liveVideo = document.getElementById('liveVideo');
+
+        startCameraButton.addEventListener('click', function() {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function(stream) {
+                    liveVideo.srcObject = stream;
+                    localStream = stream;  // Stock the stream
+                    liveVideo.style.display = 'block';  // Display the window
+                    
+                    mediaRecorder = new MediaRecorder(stream);
+                    
+                    mediaRecorder.ondataavailable = function(event) {
+                        if (event.data.size > 0) {
+                            recordedChunks.push(event.data);
+                        }
+                    };
+                    
+                    mediaRecorder.onstop = function() {
+                        // Stop video stream
+                        localStream.getTracks().forEach(track => track.stop()); // Desactivate webcam
+                        liveVideo.srcObject = null; // Remove video stream
+                        liveVideo.style.display = 'none'; // Hide the window
+                        startRecordingButton.disabled = false;
+                        stopRecordingButton.disabled = true;
+                        saveRecordingButton.disabled = false;
+                    };
+
+                    startRecordingButton.disabled = false;
+                })
+                .catch(function(err) {
+                    console.log("Error accessing the camera: " + err);
+                });
+        });
+
+        // Start recording
+        startRecordingButton.addEventListener('click', function() {
+            recordedChunks = [];
+            mediaRecorder.start();
+            startRecordingButton.disabled = true;
+            stopRecordingButton.disabled = false;
+        });
+
+        // Stop recording
+        stopRecordingButton.addEventListener('click', function() {
+            mediaRecorder.stop();
+            startRecordingButton.disabled = false;
+            stopRecordingButton.disabled = true;
+        });
+
+        // Save the recording and send to the server
+        saveRecordingButton.addEventListener('click', function() {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const formData = new FormData();
+            formData.append('video_file', blob, 'recorded_video.webm');
+
+            // Send the video to the server
+            fetch('{{ url_for("upload_video") }}', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else if (response.ok) {
+                    return response.json();
+                } else {
+                        throw new Error('Error during video uploading.');
+                }
+            }).catch(err => {
+                console.error('Error:', err);
+            });
+
+            saveRecordingButton.disabled = true;
+        });
+    </script>
 </body>
 </html>
+
+<video width="800" height="600" controls>
+    <source src="{{ url_for('static', filename=video_name) }}" type="video/mp4">
+    Your browser does not support the video tag.
+</video>
