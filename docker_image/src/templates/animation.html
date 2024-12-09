@@ -13,7 +13,7 @@
 
     <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 10px;">
         <form id="uploadForm" action="{{ url_for('upload_video') }}" method="POST" enctype="multipart/form-data" style="display: flex; align-items: center;">
-            <label for="video_file" style="margin-right: 10px;">Télécharger une vidéo</label>
+            <label for="video_file" style="margin-right: 10px;">Download a video</label>
             <input type="file" id="video_file" name="video_file" accept="video/*" required style="margin-right: 10px;">
             <button type="submit">Uploader</button>
         </form>
