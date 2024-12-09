@@ -74,7 +74,7 @@ To run the Flask application, you only need the contents of the docker_image fol
 
 1. **Clone the Repository:**
    ```bash
-   git clone https://github.com/your-username//avatar_blender_mediapipe.git
+   git clone https://github.com/RemiFigea/avatar_blender_mediapipe.git
    
 2. **Navigate to the docker_image folder:**
    ```bash
